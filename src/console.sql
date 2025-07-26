@@ -1,4 +1,4 @@
-drop view if exists products_to_distribute;
+drop materialized view if exists products_to_distribute;
 drop table if exists products;
 drop table if exists log_days;
 drop table if exists stores;
@@ -79,6 +79,10 @@ copy rc_product (product_id, rc_id, remain, reserve, transit)
     csv header
 ;
 
+create unique index on products (product_id asc);
+create unique index on rc_product (product_id asc);
+create index on branch_product (branch_id, product_id);
+
 insert into log_days(select b.branch_id,
                             p.category_id,
                             7 as logdays
@@ -101,8 +105,7 @@ insert into stores (with cte as (select distinct branch_id
 --        7 as logdays
 -- from branch_product b join products p on b.product = p.product_id
 -- ;
--- ПЕРЕПИСАТЬ! Пляшем от товара на складе, оптимизации оттуда же
--- обязательно фильтрацию на rc и p
+
 insert into needs(branch_id, product_id, needs)
     (with br_reduced as
               (select br.product_id as product_id,
@@ -125,6 +128,7 @@ insert into needs(branch_id, product_id, needs)
               join log_days as l on brd.category_id = l.category_id
          and l.branch_id = brd.branch_id);
 
+
 /*
 Есть минимум два транзита по 3000, со склада и из филиала, придется их учесть для каждого филиала.
 Также придется допустить, что на каждый филиал может быть только один транзит со склада и только один
@@ -138,8 +142,8 @@ insert into current_branch_data
                from branch_product
                group by branch_id
                order by prod_sum),
-     max_br_transit as (select max(transit) as m from branch_product),
-     max_rc_transit as (select max(transit) as m from rc_product)
+          max_br_transit as (select max(transit) as m from branch_product),
+          max_rc_transit as (select max(transit) as m from rc_product)
      select branch_id,
             prod_sum +
             (select m from max_br_transit) +
@@ -156,66 +160,53 @@ insert into current_branch_data
      from prod_volume)
 ;
 
-with cte as (
-select cd.branch_id as branch_id,
-       prod_sum,
-       branch_volume,
-       priority
-from current_branch_data as cd
-         join stores as s on cd.branch_id = s.branch_id)
+with cte as (select cd.branch_id as branch_id,
+                    prod_sum,
+                    branch_volume,
+                    priority
+             from current_branch_data as cd
+                      join stores as s on cd.branch_id = s.branch_id)
 select *,
        round(avg(prod_sum) over (partition by branch_volume), 1) as avg_prods
 from cte
 ;
 
-
-select count(*)
-from current_branch_data;
-
-select count(distinct branch_id)
-from branch_product;
-
-select count(*)
-from needs;
-
-select count(*)
-from stores;
-
 select b.transit as from_branch,
        r.transit as from_rc,
        b.product_id,
        b.branch_id
-from branch_product as b join rc_product as r on b.product_id = r.product_id
-where b.transit > 0 or r.transit > 0
+from branch_product as b
+         join rc_product as r on b.product_id = r.product_id
+where b.transit > 0
+   or r.transit > 0
 order by from_rc desc
 ;
 
-drop view if exists products_to_distribute;
+drop materialized view if exists products_to_distribute;
 /*
 Хотят больше, чем могут вместить - коэффициент?  min_shipment
 
 
 */
-create materialized view products_to_distribute as (select b.product_id as product_id,
-       b.branch_id as branch_id,
-       b.remain as br_rem,
-       r.remain as stock_rem,
-       n.needs as needs,
-       s.priority as priority,
+create materialized view products_to_distribute as
+(
+select b.product_id                               as product_id,
+       b.branch_id                                as branch_id,
+       b.remain                                   as br_rem,
+       r.remain                                   as stock_rem,
+       n.needs                                    as needs,
+       s.priority                                 as priority,
        cbd.branch_volume,
-       cbd.branch_volume - cbd.prod_sum as room_in_br,
-       sum(needs) over (partition by b.branch_id) as br_total_need
-from branch_product as b join rc_product as r on b.product_id = r.product_id
-join stores s on b.branch_id = s.branch_id
-join current_branch_data cbd on b.branch_id = cbd.branch_id
-join needs as n on b.branch_id = n.branch_id and b.product_id = n.product_id
-where r.remain > 0)
+       cbd.branch_volume - cbd.prod_sum           as room_in_br,
+       sum(needs) over (partition by b.branch_id) as br_total_need,
+       category_id
+from branch_product as b
+         join rc_product as r on b.product_id = r.product_id
+         join stores s on b.branch_id = s.branch_id
+         join current_branch_data cbd on b.branch_id = cbd.branch_id
+         join needs as n on b.branch_id = n.branch_id and b.product_id = n.product_id
+         join products as p on b.product_id = p.product_id
+where r.remain > 0
+order by product_id)
 ;
-
-select *
-from products_to_distribute
-where product_id = '6c0f29b3-b653-11e8-9547-00155d03330d'
-order by priority, branch_volume;
-
-
 
