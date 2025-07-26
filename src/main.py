@@ -28,7 +28,7 @@ class ProductDistribution:
         Base.metadata.drop_all(bind=self.engine)
         Base.metadata.create_all(bind=self.engine)
         # self.categories = self.get_categories()
-        self.run_distribution()
+
 
     def get_db_data(self, txt):
         with self.engine.connect() as connection:
@@ -112,6 +112,7 @@ class ProductDistribution:
 
 def main():
     pd = ProductDistribution()
+    pd.run_distribution()
 
 
 if __name__ == '__main__':
