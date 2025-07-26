@@ -40,10 +40,6 @@ class ProductDistribution:
                            "available_percent": x[1] / x[2], "needs":x[1], "volume": x[2]}
                 for x in result}
 
-    # def get_categories(self):
-    #     result = self.get_db_data("select distinct category_id from products")
-    #     return result
-
     def get_products(self):
         result = self.get_db_data("select distinct product_id from products_to_distribute")
         return result
@@ -114,18 +110,9 @@ class ProductDistribution:
             self.insert_data(new_transit)
 
 
-# with engine.connect() as connection:
-#     result = connection.execute(text("select * from stores"))
-#     for row in result:
-#         print(row)
-#     print(1)
-
-
 def main():
     pd = ProductDistribution()
 
 
 if __name__ == '__main__':
     main()
-
-# alex dnstesttask
