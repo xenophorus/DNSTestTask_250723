@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, text, Column, Integer, UUID
 from sqlalchemy.orm import DeclarativeBase, Session
+import asyncio
 import math
 
 USERNAME = "alex"
@@ -30,11 +31,11 @@ class ProductDistribution:
         # self.categories = self.get_categories()
 
 
-    def get_db_data(self, txt):
+    async def get_db_data(self, txt):
         with self.engine.connect() as connection:
             return connection.execute(text(txt)).fetchall()
 
-    def get_branches(self):
+    async def get_branches(self):
         result = self.get_db_data("select * from current_branch_data")
         return {str(x[0]):{"branch": str(x[0]), "room": x[2] - x[1],
                            "available_percent": x[1] / x[2], "needs":x[1], "volume": x[2]}
@@ -110,10 +111,10 @@ class ProductDistribution:
             self.insert_data(new_transit)
 
 
-def main():
+async def main():
     pd = ProductDistribution()
     pd.run_distribution()
 
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())
